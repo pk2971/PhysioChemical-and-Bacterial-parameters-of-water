@@ -19,32 +19,104 @@ st.set_page_config(
 # ── Styling ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+  /* ── Force light mode always ── */
+  html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    color-scheme: light !important;
+    background-color: #f0f4f8 !important;
+    color: #1a1a1a !important;
+  }
+
+  /* ── App background ── */
   [data-testid="stAppViewContainer"] { background: #f0f4f8; }
   [data-testid="stHeader"] { background: transparent; }
+
+  /* ── Titles ── */
   .main-title {
     font-size: 2rem; font-weight: 700; color: #1a3a5c;
     border-bottom: 3px solid #2196F3; padding-bottom: 8px; margin-bottom: 4px;
   }
   .subtitle { color: #546e7a; font-size: 0.95rem; margin-bottom: 20px; }
+
+  /* ── Metric cards ── */
   .metric-card {
     background: white; border-radius: 12px; padding: 16px 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center;
   }
   .metric-value { font-size: 2rem; font-weight: 700; }
-  .metric-label { font-size: 0.8rem; color: #78909c; text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-label {
+    font-size: 0.75rem; color: #78909c;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    white-space: normal; word-break: break-word; line-height: 1.3;
+    margin-top: 4px;
+  }
+
+  /* ── Section headers ── */
   .section-header {
-    font-size: 1.1rem; font-weight: 600; color: #1a3a5c;
+    font-size: 1.1rem; font-weight: 700; color: #1a3a5c;
     margin: 16px 0 10px 0; border-left: 4px solid #2196F3; padding-left: 10px;
   }
-  .loc-detail-box {
-    background: white; border-radius: 12px; padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 12px;
-  }
+
+  /* ── Badges ── */
   .pass-badge  { background:#e8f5e9; color:#2e7d32; border-radius:6px; padding:2px 8px; font-size:0.78rem; font-weight:600; }
   .fail-badge  { background:#ffebee; color:#c62828; border-radius:6px; padding:2px 8px; font-size:0.78rem; font-weight:600; }
   .warn-badge  { background:#fff8e1; color:#e65100; border-radius:6px; padding:2px 8px; font-size:0.78rem; font-weight:600; }
   .na-badge    { background:#eceff1; color:#546e7a; border-radius:6px; padding:2px 8px; font-size:0.78rem; font-weight:600; }
-  div[data-testid="stTabs"] button { font-weight: 600; }
+
+  /* ── Tabs — raised + clearly clickable ── */
+  div[data-testid="stTabs"] [role="tablist"] {
+    background: #dce8f5;
+    border-radius: 10px 10px 0 0;
+    padding: 4px 6px 0 6px;
+    gap: 4px;
+    border-bottom: 2px solid #2196F3;
+  }
+  div[data-testid="stTabs"] button[role="tab"] {
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: #37474f !important;
+    background: #eef4fb;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid #b0cce8;
+    border-bottom: none;
+    padding: 8px 16px;
+    margin-bottom: -1px;
+    transition: background 0.15s;
+  }
+  div[data-testid="stTabs"] button[role="tab"]:hover {
+    background: #c9dff5;
+    color: #1a3a5c !important;
+  }
+  div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    background: white;
+    color: #1565C0 !important;
+    border-color: #2196F3 #2196F3 white #2196F3;
+    border-bottom: 2px solid white;
+  }
+
+  /* ── Select boxes / multiselect — visible against background ── */
+  div[data-testid="stSelectbox"] > div,
+  div[data-testid="stMultiSelect"] > div {
+    background: white !important;
+    border: 1.5px solid #90CAF9 !important;
+    border-radius: 8px !important;
+    color: #1a1a1a !important;
+  }
+
+  /* ── Widget label text — Streamlit renders these as <p> inside a label div ── */
+  div[data-testid="stSelectbox"] > label p,
+  div[data-testid="stMultiSelect"] > label p,
+  div[data-testid="stCheckbox"] > label p,
+  div[data-testid="stRadio"] > label p,
+  [data-testid="stWidgetLabel"] p {
+    font-weight: 700 !important;
+    color: #1a3a5c !important;
+    font-size: 0.9rem !important;
+  }
+
+  /* ── General text colour fix (prevents white-on-white on load) ── */
+  [data-testid="stMarkdownContainer"] p {
+    color: #1a1a1a;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -723,4 +795,4 @@ with tab5:
 
 # Footer
 st.markdown("---")
-st.markdown('<div style="text-align:center;color:#90a4ae;font-size:0.8rem">Data source: Physicochemical & Bacterial analysis of water sources, Tirupati · BIS IS 10500:2012 drinking water standards</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;color:#90a4ae;font-size:0.8rem">Data source: PhysicoChemical & Bacterial analysis of water sources, Tirupati · BIS IS 10500:2012 drinking water standards</div>', unsafe_allow_html=True)
