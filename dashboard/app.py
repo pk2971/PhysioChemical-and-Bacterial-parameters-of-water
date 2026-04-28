@@ -218,7 +218,7 @@ with c3:
     st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:{col}">{avg_wqi:.0f}</div><div class="metric-label">Avg WQI Score</div></div>', unsafe_allow_html=True)
 with c4:
     pct = fail_any/total*100
-    st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#E65100">{fail_any} <span style="font-size:1rem">({pct:.0f}%)</span></div><div class="metric-label">Locations Exceeding Limits</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#E65100">{fail_any} <span style="font-size:1rem">({pct:.0f}%)</span></div><div class="metric-label">Locations Exceeding ≥1 BIS Limit</div></div>', unsafe_allow_html=True)
 with c5:
     st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:#B71C1C">{ecoli_pos}</div><div class="metric-label">E. coli Positive</div></div>', unsafe_allow_html=True)
 
@@ -237,55 +237,87 @@ with tab1:
     col_ctrl, col_map = st.columns([1, 3])
 
     with col_ctrl:
-        st.markdown('<div class="section-header">Map Controls</div>', unsafe_allow_html=True)
-        colour_by = st.selectbox("Colour markers by",
-            ["WQI Score","Source Category","E.coli Status","TDS","pH","Hardness","Fluoride F","Arsenic As","Lead Pb"],
-            key="map_colour")
-        show_ecoli = st.checkbox("Highlight E.coli positive", value=True)
+            st.markdown('<div class="section-header">Map Controls</div>', unsafe_allow_html=True)
 
-        st.markdown('<div class="section-header">Legend</div>', unsafe_allow_html=True)
-        if colour_by == "WQI Score":
-            for lbl, col in [("Excellent (<25)","#1B5E20"),("Good (25-50)","#388E3C"),
-                              ("Poor (50-75)","#F57F17"),("Very Poor (75-100)","#E65100"),
-                              ("Unsuitable (>100)","#B71C1C")]:
-                st.markdown(f'<span style="color:{col}">⬤</span> {lbl}', unsafe_allow_html=True)
-        elif colour_by == "Source Category":
-            for cat, col in CAT_SOURCE_COLORS.items():
-                if cat in df["Source Category"].values:
-                    st.markdown(f'<span style="color:{col}">⬤</span> {cat}', unsafe_allow_html=True)
-        else:
-            st.markdown("🔵 Low &nbsp;&nbsp; 🟡 Mid &nbsp;&nbsp; 🔴 High", unsafe_allow_html=True)
+            source_type_filter = st.multiselect(
+                "Water source type",
+                options=sorted(df_map["Source Category"].unique().tolist()),
+                default=sorted(df_map["Source Category"].unique().tolist()),
+                key="map_source_filter"
+            )
+            df_map_filtered = df_map[df_map["Source Category"].isin(source_type_filter)].copy()
 
-        st.markdown('<div class="section-header">Click a marker</div>', unsafe_allow_html=True)
-        st.info("Click any map marker, then go to the **Location Detail** tab to see the full analysis.")
+            colour_by = st.selectbox("Colour markers by",
+                ["WQI Score", "Source Category", "E.coli Status",
+                "pH", "Alkalinity", "TDS", "Hardness", "Electrical conductivity",
+                "Resistance", "CalciumCa", "Magnesium Mg", "Fluoride F",
+                "Aluminium Al", "Chromium Cr", "Manganese Mn", "Nickel  Ni",
+                "Copper Cu", "Arsenic As", "Selenium Se", "Molybden Mo",
+                "Silver  Ag", "Cadmium Cd", "Barium Ba", "Mercury Hg",
+                "Lead Pb", "Uranium U", "Bacterial_num"],
+                key="map_colour"
+            )
+            show_ecoli = st.checkbox("Highlight E.coli positive", value=True)
 
+            st.markdown('<div class="section-header">Legend</div>', unsafe_allow_html=True)
+            if colour_by == "WQI Score":
+                for lbl, col in [("Excellent (<25)","#1B5E20"),("Good (25–50)","#388E3C"),
+                                ("Poor (50–75)","#F57F17"),("Very Poor (75–100)","#E65100"),
+                                ("Unsuitable (>100)","#B71C1C")]:
+                    st.markdown(f'<span style="color:{col}">⬤</span> {lbl}', unsafe_allow_html=True)
+            elif colour_by == "Source Category":
+                for cat, col in CAT_SOURCE_COLORS.items():
+                    if cat in df_map_filtered["Source Category"].values:
+                        st.markdown(f'<span style="color:{col}">⬤</span> {cat}', unsafe_allow_html=True)
+            elif colour_by == "E.coli Status":
+                st.markdown('<span style="color:#B71C1C">⬤</span> Positive', unsafe_allow_html=True)
+                st.markdown('<span style="color:#1B5E20">⬤</span> Negative', unsafe_allow_html=True)
+            else:
+                mn = df_map_filtered[colour_by].min()
+                mx = df_map_filtered[colour_by].max()
+                st.markdown(f"""
+                <div style="background:linear-gradient(to right,#1565C0,#FDD835,#B71C1C);
+                            height:14px;border-radius:6px;margin:6px 0"></div>
+                <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#546e7a">
+                    <span>{mn:.3g}</span><span>↑ mid</span><span>{mx:.3g}</span>
+                </div>
+                <div style="font-size:0.78rem;color:#546e7a;margin-top:4px">{PARAM_UNITS.get(colour_by,'')}</div>
+                """, unsafe_allow_html=True)
+
+            st.markdown('<div class="section-header">Click a marker</div>', unsafe_allow_html=True)
+            st.info("Click any marker → go to **Location Detail** tab.")
     with col_map:
         m = folium.Map(location=[13.62, 79.42], zoom_start=12,
                        tiles="CartoDB positron")
 
-        # Compute marker colors
-        if colour_by == "WQI Score":
-            df_map["_mc"] = df_map["WQI"].apply(lambda s: wqi_label(s)[1])
-        elif colour_by == "Source Category":
-            df_map["_mc"] = df_map["Source Category"].map(CAT_SOURCE_COLORS).fillna("#78909C")
-        elif colour_by == "E.coli Status":
-            df_map["_mc"] = df_map["Ecoli_pos"].map({True:"#B71C1C", False:"#1B5E20"})
-        else:
-            param = colour_by
-            mn, mx = df_map[param].min(), df_map[param].max()
-            def pcolor(v):
-                if pd.isna(v) or mx == mn: return "#78909C"
-                r = (v - mn) / (mx - mn)
-                if r < 0.5:
-                    g = int(255 * (1 - 2*r) * 0.8 + 50)
-                    return f"#1565{g:02X}"
-                else:
-                    r2 = (r - 0.5) * 2
-                    red = int(180 + 75*r2)
-                    return f"#{red:02X}2020"
-            df_map["_mc"] = df_map[param].apply(pcolor)
+        def gradient_color(v, mn, mx):
+            """Blue → Yellow → Red gradient matching the legend."""
+            if pd.isna(v) or mx == mn:
+                return "#78909C"
+            r = (v - mn) / (mx - mn)
+            if r < 0.5:
+                t = r * 2  # 0→1: blue to yellow
+                R = int(21  + t * (253 - 21))
+                G = int(101 + t * (216 - 101))
+                B = int(192 + t * (53  - 192))
+            else:
+                t = (r - 0.5) * 2  # 0→1: yellow to red
+                R = int(253 + t * (183 - 253))
+                G = int(216 + t * (28  - 216))
+                B = int(53  + t * (28  - 53))
+            return f"#{R:02X}{G:02X}{B:02X}"
 
-        for _, row in df_map.iterrows():
+        if colour_by == "WQI Score":
+            df_map_filtered["_mc"] = df_map_filtered["WQI"].apply(lambda s: wqi_label(s)[1])
+        elif colour_by == "Source Category":
+            df_map_filtered["_mc"] = df_map_filtered["Source Category"].map(CAT_SOURCE_COLORS).fillna("#78909C")
+        elif colour_by == "E.coli Status":
+            df_map_filtered["_mc"] = df_map_filtered["Ecoli_pos"].map({True:"#B71C1C", False:"#1B5E20"})
+        else:
+            mn, mx = df_map_filtered[colour_by].min(), df_map_filtered[colour_by].max()
+            df_map_filtered["_mc"] = df_map_filtered[colour_by].apply(lambda v: gradient_color(v, mn, mx))
+
+        for _, row in df_map_filtered.iterrows():
             wlbl, _ = wqi_label(row["WQI"])
             bact_val = row["Bacterial_num"]
             bact_str = "Too many to count" if bact_val >= 10000 else f"{int(bact_val) if not pd.isna(bact_val) else 'N/A'} CFU/100ml"
@@ -320,19 +352,72 @@ with tab1:
         if map_data and map_data.get("last_object_clicked_tooltip"):
             st.session_state["selected_location"] = map_data["last_object_clicked_tooltip"]
 
+    with st.expander("ℹ️ How is the WQI score calculated?"):
+            st.markdown("""
+            The **Water Quality Index (WQI)** used here is a weighted composite score that collapses
+            all measured parameters into a single number, making it easy to compare locations at a glance.
+
+            **How it works:**
+            1. Each parameter is normalised as a ratio of its measured value to its BIS IS 10500:2012 acceptable limit
+            2. That ratio is multiplied by a weight reflecting health significance
+            3. All weighted values are summed to produce the final score
+
+            **Parameters included and their weights:**
+
+            | Parameter | Weight | Rationale |
+            |---|---|---|
+            | Bacterial load | 0.15 | Primary health risk indicator |
+            | pH | 0.12 | Affects corrosivity and taste |
+            | TDS | 0.12 | Overall dissolved solids proxy |
+            | Arsenic | 0.12 | Highly toxic heavy metal |
+            | Lead | 0.10 | Neurotoxic heavy metal |
+            | Mercury | 0.10 | Highly toxic, bioaccumulates |
+            | Fluoride | 0.08 | Dental/skeletal fluorosis risk |
+            | Cadmium | 0.08 | Carcinogenic heavy metal |
+            | Hardness | 0.08 | Scale formation, taste |
+            | Alkalinity | 0.05 | pH buffering capacity |
+            | Calcium | 0.05 | Hardness contributor |
+            | Magnesium | 0.05 | Hardness contributor |
+
+            **Score interpretation:**
+
+            | Score | Category |
+            |---|---|
+            | < 25 | 🟢 Excellent |
+            | 25 – 50 | 🟩 Good |
+            | 50 – 75 | 🟡 Poor |
+            | 75 – 100 | 🟠 Very Poor |
+            | > 100 | 🔴 Unsuitable for drinking |
+
+            > **Note:** Parameters not listed (e.g. colour, odour, resistance) are shown in the
+            > compliance table but excluded from the WQI to avoid double-counting correlated variables.
+            > The weights here are adapted from standard WQI literature; your PI may want to adjust
+            > them based on local health priorities.
+            """)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 2 – LOCATION DETAIL
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab2:
-    loc_names = df["Location in Tirupati"].tolist()
+    source_cats = sorted(df["Source Category"].unique().tolist())
+    sel_source = st.selectbox("Select water source type", source_cats, key="detail_source")
+
+    df_source = df[df["Source Category"] == sel_source].copy()
+    # Build display labels: "Location name (type code)" to disambiguate duplicates
+    df_source["_display"] = df_source["Location in Tirupati"] + "  ·  " + df_source["Type of water source with code"]
+
+    df_source = df_source.sort_values("Location in Tirupati")
+    display_names = df_source["_display"].tolist()
     default_idx = 0
     if "selected_location" in st.session_state:
-        try:
-            default_idx = loc_names.index(st.session_state["selected_location"])
-        except: pass
+        # Try to match the clicked map location to this source type's list
+        clicked = st.session_state["selected_location"]
+        matches = [i for i, d in enumerate(display_names) if d.startswith(clicked)]
+        if matches:
+            default_idx = matches[0]
 
-    sel_loc = st.selectbox("Select a location", loc_names, index=default_idx, key="detail_loc")
-    row = df[df["Location in Tirupati"] == sel_loc].iloc[0]
+    sel_display = st.selectbox("Select location", display_names, index=default_idx, key="detail_loc")
+    row = df_source[df_source["_display"] == sel_display].iloc[0]
     wlbl, wcol = wqi_label(row["WQI"])
 
     # Header cards
@@ -527,6 +612,7 @@ with tab4:
 
     with col_a:
         st.markdown('<div class="section-header">Exceedance Count per Parameter</div>', unsafe_allow_html=True)
+        st.caption("Number of locations (out of 92) where the measured value exceeds the BIS IS 10500:2012 acceptable limit for that parameter. Does not include the relaxed permissible limit.")
         exc_counts = {}
         for param, (lo, hi) in ACCEPTABLE.items():
             if hi:
@@ -562,19 +648,51 @@ with tab4:
 
     with col_d:
         st.markdown('<div class="section-header">Compliance Heatmap (locations × parameters)</div>', unsafe_allow_html=True)
+
+        # Source filter for heatmap — clean labels without code numbers
+        def clean_source_label(s):
+            return re.sub(r'\s+\d+$', '', s).strip().title()
+
+        df["_source_label"] = df["Type of water source with code"].apply(clean_source_label)
+        source_label_options = ["All 92 locations"] + sorted(df["_source_label"].unique().tolist())
+        heat_source_sel = st.selectbox("Filter by water source", source_label_options, key="heat_source")
+
+        if heat_source_sel == "All 92 locations":
+            df_heat = df.copy()
+        else:
+            df_heat = df[df["_source_label"] == heat_source_sel].copy()
+
         heat_params = [p for p in ACCEPTABLE if ACCEPTABLE[p][1]]
-        heat_df = df[["Location in Tirupati"] + heat_params].set_index("Location in Tirupati")
+        heat_df = df_heat[["S.No.", "Location in Tirupati", "Type of water source with code"] + heat_params].copy()
+        heat_df.index = (
+            heat_df["S.No."].astype(str) + " · " +
+            heat_df["Location in Tirupati"] + " · " +
+            heat_df["Type of water source with code"]
+        )
+        heat_df = heat_df[heat_params]
+
         norm_df = pd.DataFrame(index=heat_df.index)
         for p in heat_params:
             hi = ACCEPTABLE[p][1]
             norm_df[p.strip()] = (heat_df[p] / hi).clip(0, 3)
-        fig_heat = px.imshow(norm_df.T, aspect="auto",
-                             color_continuous_scale=["#E8F5E9","#FFF9C4","#FFCDD2","#B71C1C"],
-                             zmin=0, zmax=2,
-                             labels={"color":"Ratio to BIS limit"})
-        fig_heat.update_layout(paper_bgcolor="rgba(0,0,0,0)",
-                                xaxis=dict(tickfont=dict(size=7)),
-                                margin=dict(t=10))
+
+        fig_heat = px.imshow(
+            norm_df.T, aspect="auto",
+            color_continuous_scale=["#E8F5E9","#FFF9C4","#FFCDD2","#B71C1C"],
+            zmin=0, zmax=2,
+            labels={"color":"Ratio to BIS limit"}
+        )
+        fig_heat.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(tickfont=dict(size=7)),
+            yaxis=dict(tickfont=dict(size=9)),
+            margin=dict(t=10),
+            height=400
+        )
+        fig_heat.update_traces(
+            xgap=2,
+            ygap=2,
+        )
         st.plotly_chart(fig_heat, use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
