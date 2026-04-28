@@ -51,7 +51,7 @@ st.markdown("""
 # ── Data loading ──────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    df = pd.read_excel("data.xlsx", sheet_name="water quality")
+    df = pd.read_excel("dashboard/data.xlsx", sheet_name="water quality")
 
     # Source category
     def categorise(s):
