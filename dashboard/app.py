@@ -174,9 +174,9 @@ def load_data():
 
 # ── BIS limits ────────────────────────────────────────────────────────────────
 ACCEPTABLE = {
-    "pH": (6.5, 8.5), "Alkalinity": (None, 200), "TDS": (None, 500),
-    "Hardness": (None, 200), "CalciumCa": (None, 75), "Magnesium Mg": (None, 30),
-    "Fluoride F": (None, 1.0), "Aluminium Al": (None, 0.03), "Chromium Cr": (None, 0.05),
+    "pH": (7.0, 8.5), "Alkalinity": (75, 200), "TDS": (150, 500),
+    "Hardness": (100, 200), "CalciumCa": (25, 75), "Magnesium Mg": (10, 30),
+    "Fluoride F": (0.5, 1.0), "Aluminium Al": (None, 0.03), "Chromium Cr": (None, 0.05),
     "Manganese Mn": (None, 0.1), "Nickel  Ni": (None, 0.02), "Copper Cu": (None, 0.05),
     "Arsenic As": (None, 0.01), "Selenium Se": (None, 0.01), "Molybden Mo": (None, 0.07),
     "Silver  Ag": (None, 0.1), "Cadmium Cd": (None, 0.003), "Barium Ba": (None, 0.7),
@@ -227,28 +227,58 @@ def compliance_status(row):
     return fails, warns
 
 @st.cache_data
+@st.cache_data
 def compute_wqi(df):
     weights = {
         "pH":0.122,"TDS":0.122,"Hardness":0.08,"Alkalinity":0.05,"CalciumCa":0.05,
         "Magnesium Mg":0.05,"Fluoride F":0.08,"Arsenic As":0.12,"Lead Pb":0.1,
         "Mercury Hg":0.1,"Cadmium Cd":0.08,"Bacterial_num":0.15,
     }
-    ideal = {"pH":7.0,"TDS":0,"Hardness":0,"Alkalinity":0,"CalciumCa":0,
-             "Magnesium Mg":0,"Fluoride F":0,"Arsenic As":0,"Lead Pb":0,
-             "Mercury Hg":0,"Cadmium Cd":0,"Bacterial_num":0}
-    standards = {"pH":8.5,"TDS":500,"Hardness":200,"Alkalinity":200,"CalciumCa":75,
-                 "Magnesium Mg":30,"Fluoride F":1.0,"Arsenic As":0.01,"Lead Pb":0.01,
-                 "Mercury Hg":0.001,"Cadmium Cd":0.003,"Bacterial_num":0}
+    # For range parameters: ideal is the midpoint of the healthy range,
+    # penalty is distance from nearest range boundary normalised to that boundary
+    # For upper-only parameters: ideal stays 0, standard is the BIS upper limit
+    RANGE_PARAMS = {
+        # param: (low_ideal, high_ideal)
+        "pH":        (7.0, 8.5),
+        "TDS":       (150, 500),
+        "Hardness":  (100, 200),
+        "Alkalinity":(75,  200),
+        "CalciumCa": (25,  75),
+        "Magnesium Mg":(10, 30),
+        "Fluoride F":(0.5, 1.0),
+    }
+    UPPER_PARAMS = {
+        # param: BIS upper limit (ideal = 0)
+        "Arsenic As":  0.01,
+        "Lead Pb":     0.01,
+        "Mercury Hg":  0.001,
+        "Cadmium Cd":  0.003,
+        "Bacterial_num": 1,   # any count > 0 is bad; normalise to 1
+    }
+
     wqi = []
     for _, row in df.iterrows():
         score = 0
         for p, w in weights.items():
             v = row.get(p, np.nan)
             if pd.isna(v): v = 0
-            s = standards[p]
-            i = ideal[p]
-            if s == i: continue
-            qi = abs(v - i) / abs(s - i) * 100
+
+            if p in RANGE_PARAMS:
+                lo, hi = RANGE_PARAMS[p]
+                if v < lo:
+                    # below healthy range — penalise proportionally to how far below
+                    qi = ((lo - v) / lo) * 100
+                elif v > hi:
+                    # above healthy range — penalise proportionally to how far above
+                    qi = ((v - hi) / hi) * 100
+                else:
+                    qi = 0  # within healthy range, no penalty
+            elif p in UPPER_PARAMS:
+                standard = UPPER_PARAMS[p]
+                qi = (v / standard) * 100 if standard > 0 else 0
+            else:
+                qi = 0
+
             score += w * qi
         wqi.append(min(score, 300))
     return wqi
@@ -347,14 +377,27 @@ with tab1:
             else:
                 mn = df_map_filtered[colour_by].min()
                 mx = df_map_filtered[colour_by].max()
-                st.markdown(f"""
-                <div style="background:linear-gradient(to right,#1565C0,#FDD835,#B71C1C);
-                            height:14px;border-radius:6px;margin:6px 0"></div>
-                <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#546e7a">
-                    <span>{mn:.3g}</span><span>↑ mid</span><span>{mx:.3g}</span>
-                </div>
-                <div style="font-size:0.78rem;color:#546e7a;margin-top:4px">{PARAM_UNITS.get(colour_by,'')}</div>
-                """, unsafe_allow_html=True)
+                if colour_by == "Bacterial_num":
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(to right,#1565C0,#FDD835,#B71C1C);
+                                height:14px;border-radius:6px;margin:6px 0"></div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#546e7a">
+                        <span>0 CFU</span><span>↑ rank</span><span>TMTC 🔴</span>
+                    </div>
+                    <div style="font-size:0.78rem;color:#546e7a;margin-top:4px">
+                        Colour = relative rank · red = Too Many To Count
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    mn, mx = df_map_filtered[colour_by].min(), df_map_filtered[colour_by].max()
+                    st.markdown(f"""
+                    <div style="background:linear-gradient(to right,#1565C0,#FDD835,#B71C1C);
+                                height:14px;border-radius:6px;margin:6px 0"></div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#546e7a">
+                        <span>{mn:.3g}</span><span>↑ mid</span><span>{mx:.3g}</span>
+                    </div>
+                    <div style="font-size:0.78rem;color:#546e7a;margin-top:4px">{PARAM_UNITS.get(colour_by,'')}</div>
+                    """, unsafe_allow_html=True)
 
             st.markdown('<div class="section-header">Click a marker</div>', unsafe_allow_html=True)
             st.info("Click any marker → go to **Location Detail** tab.")
@@ -386,8 +429,15 @@ with tab1:
         elif colour_by == "E.coli Status":
             df_map_filtered["_mc"] = df_map_filtered["Ecoli_pos"].map({True:"#B71C1C", False:"#1B5E20"})
         else:
-            mn, mx = df_map_filtered[colour_by].min(), df_map_filtered[colour_by].max()
-            df_map_filtered["_mc"] = df_map_filtered[colour_by].apply(lambda v: gradient_color(v, mn, mx))
+            if colour_by == "Bacterial_num":
+                # Use rank-based scaling so TNTC (10000) doesn't collapse
+                # all real counts to the same blue end of the gradient
+                ranks = df_map_filtered[colour_by].rank(method="dense", na_option="bottom")
+                mn_r, mx_r = ranks.min(), ranks.max()
+                df_map_filtered["_mc"] = ranks.apply(lambda v: gradient_color(v, mn_r, mx_r))
+            else:
+                mn, mx = df_map_filtered[colour_by].min(), df_map_filtered[colour_by].max()
+                df_map_filtered["_mc"] = df_map_filtered[colour_by].apply(lambda v: gradient_color(v, mn, mx))
 
         for _, row in df_map_filtered.iterrows():
             wlbl, _ = wqi_label(row["WQI"])
@@ -461,10 +511,12 @@ with tab1:
             | 75 – 100 | 🟠 Very Poor |
             | > 100 | 🔴 Unsuitable for drinking |
 
-            > **Note:** Parameters not listed (e.g. colour, odour, resistance) are shown in the
+           > **Note:** Parameters not listed (e.g. colour, odour, resistance) are shown in the
             > compliance table but excluded from the WQI to avoid double-counting correlated variables.
-            > The weights here are adapted from standard WQI literature; your PI may want to adjust
-            > them based on local health priorities.
+            > The WQI penalises values that fall **outside the healthy range in either direction** —
+            > very low TDS, alkalinity, calcium, magnesium, fluoride, or hardness are scored as poor
+            > just as values that are too high would be. This reflects PI guidance that demineralised
+            > water is not optimal for health.
             """)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -504,7 +556,7 @@ with tab2:
     with c4:
         ec = "#B71C1C" if row["Ecoli_pos"] else "#1B5E20"
         ecstr = "Positive ⚠️" if row["Ecoli_pos"] else "Negative ✓"
-        st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:{ec};font-size:1.4rem">{ecstr}</div><div class="metric-label">E. coli</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card"><div class="metric-value" style="color:{ec};font-size:2.0rem">{ecstr}</div><div class="metric-label">E. coli</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
